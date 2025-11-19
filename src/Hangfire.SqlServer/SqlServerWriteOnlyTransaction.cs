@@ -18,9 +18,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
-#if FEATURE_TRANSACTIONSCOPE
-using System.Transactions;
-#endif
 using Hangfire.Annotations;
 using Hangfire.Common;
 using Hangfire.States;
@@ -243,6 +240,12 @@ $@"insert into [{schemaName}].JobQueue (JobId, Queue) values (@jobId, @queue)");
             }
             else
             {
+#if FEATURE_TRANSACTIONSCOPE
+                if (_storage.Options.DisableTransactionScope)
+                {
+                    throw new NotSupportedException($"`{nameof(SqlServerStorageOptions.DisableTransactionScope)}` option does not support external queue providers");
+                }
+#endif
                 _queueCommandQueue.Enqueue((connection, transaction) => persistentQueue.Enqueue(
                     connection,
 #if !FEATURE_TRANSACTIONSCOPE
