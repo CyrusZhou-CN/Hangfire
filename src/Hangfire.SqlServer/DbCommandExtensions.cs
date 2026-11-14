@@ -26,9 +26,6 @@ namespace Hangfire.SqlServer
 {
     internal static class DbCommandExtensions
     {
-        private const int DefaultStringSize1 = 256;
-        private const int DefaultStringSize2 = 4_000;
-        
         private static readonly ConcurrentDictionary<KeyValuePair<string, KeyValuePair<string, int>>, string> ExpandedQueries =
             new ConcurrentDictionary<KeyValuePair<string, KeyValuePair<string, int>>, string>();
 
@@ -63,7 +60,8 @@ namespace Hangfire.SqlServer
             if (command == null) throw new ArgumentNullException(nameof(command));
             if (parameterName == null) throw new ArgumentNullException(nameof(parameterName));
 
-            AddParameterInternal(command, parameterName, dbType, size, value);
+            var parameter = AddParameterInternal(command, parameterName, dbType, size);
+            parameter.Value = value ?? DBNull.Value;
 
             return command;
         }
@@ -78,8 +76,9 @@ namespace Hangfire.SqlServer
             if (command == null) throw new ArgumentNullException(nameof(command));
             if (parameterName == null) throw new ArgumentNullException(nameof(parameterName));
 
-            parameter = AddParameterInternal(command, parameterName, dbType, size, value: null);
+            parameter = AddParameterInternal(command, parameterName, dbType, size);
             parameter.Direction = ParameterDirection.ReturnValue;
+            parameter.Value = DBNull.Value;
 
             return command;
         }
@@ -106,7 +105,8 @@ namespace Hangfire.SqlServer
 
             for (var i = 0; i < parameterValues.Length; i++)
             {
-                AddParameterInternal(command, parameterName + i.ToString(CultureInfo.InvariantCulture), parameterType, parameterSize, parameterValues[i]);
+                var parameter = AddParameterInternal(command, parameterName + i.ToString(CultureInfo.InvariantCulture), parameterType, parameterSize);
+                parameter.Value = (object)parameterValues[i] ?? DBNull.Value;
             }
 
             return command;
@@ -131,29 +131,13 @@ namespace Hangfire.SqlServer
             DbCommand command,
             string parameterName,
             DbType dbType,
-            int? size,
-            object value)
+            int? size)
         {
             var parameter = command.CreateParameter();
             parameter.ParameterName = parameterName;
             parameter.DbType = dbType;
-            
-            if (value is string strValue)
-            {
-                parameter.Size = strValue.Length switch
-                {
-                    <= DefaultStringSize1 => DefaultStringSize1,
-                    <= DefaultStringSize2 => DefaultStringSize2,
-                    _ => -1
-                };
-            }
 
-            if (size.HasValue)
-            {
-                parameter.Size = size.Value;
-            }
-
-            parameter.Value = value ?? DBNull.Value;
+            if (size.HasValue) parameter.Size = size.Value;
 
             command.Parameters.Add(parameter);
             return parameter;
